@@ -1,0 +1,59 @@
+const S={a_postuler:['À postuler','#64748b'],postule:['Postulé','#6366f1'],entretien:['Entretien','#f59e0b'],offre:['Offre','#10b981'],refuse:['Refusé','#ef4444']};
+const I={appel:'bi-telephone',email:'bi-envelope',entretien:'bi-people',note:'bi-sticky',relance:'bi-bell'};
+let D=[],C=[],view='dash',q='',ch=[];const $=s=>document.querySelector(s),csrf=$('meta[name=csrf]').content,modal=new bootstrap.Modal($('#m')),cmodal=new bootstrap.Modal($('#cm')),f=$('#f'),cf=$('#cf');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=async(a,b)=>{const fm=b instanceof FormData,h={'X-CSRF':csrf};if(b&&!fm)h['Content-Type']='application/json';
+ const r=await fetch('api.php?a='+a,{method:b?'POST':'GET',headers:h,body:b?(fm?b:JSON.stringify(b)):undefined});
+ if(r.status===401)location='login.php';const j=await r.json();if(!r.ok)throw Error(j.error||'Erreur');return j};
+const toast=t=>{const e=$('#toast');e.textContent=t;e.classList.remove('d-none');setTimeout(()=>e.classList.add('d-none'),2400)};
+const fd=d=>d?new Date(d).toLocaleDateString('fr-FR'):'—',today=new Date().toISOString().slice(0,10);
+const badge=s=>`<span class="badge-s" style="background:${S[s][1]}">${S[s][0]}</span>`;
+const av=(n,l)=>l?`<img class="co-logo" src="${esc(l)}" alt="Logo ${esc(n)}">`:`<span class="co-logo ph" aria-hidden="true">${esc((n||'?')[0]).toUpperCase()}</span>`;
+async function load(){[D,C]=await Promise.all([api('list'),api('companies')]);render()}
+function dash(){ch.forEach(c=>c.destroy());ch=[];Chart.defaults.color=getComputedStyle(document.body).getPropertyValue('--mut').trim();Chart.defaults.font.family='Inter';
+ const mk=(id,cfg)=>ch.push(new Chart($(id),cfg)),ks=Object.keys(S),o={maintainAspectRatio:false,plugins:{legend:{display:false}}};
+ mk('#c1',{type:'doughnut',data:{labels:ks.map(k=>S[k][0]),datasets:[{data:ks.map(k=>D.filter(a=>a.status===k).length),backgroundColor:ks.map(k=>S[k][1]),borderWidth:0}]},options:{...o,cutout:'68%',plugins:{legend:{position:'bottom'}}}});
+ const ms=[...Array(6)].map((_,i)=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-5+i);return d.toISOString().slice(0,7)});
+ mk('#c2',{type:'bar',data:{labels:ms.map(m=>new Date(m+'-01').toLocaleDateString('fr-FR',{month:'short'})),datasets:[{data:ms.map(m=>D.filter(a=>(a.applied_at||a.created_at).slice(0,7)===m).length),backgroundColor:'#6366f1',borderRadius:8}]},options:{...o,scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+ const sc={};D.forEach(a=>{const s=a.sector||'Non renseigné';sc[s]=(sc[s]||0)+1});
+ mk('#c3',{type:'bar',data:{labels:Object.keys(sc),datasets:[{data:Object.values(sc),backgroundColor:'#8b5cf6',borderRadius:8}]},options:{...o,indexAxis:'y',scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+ $('#up').innerHTML=D.filter(a=>a.follow_up&&['postule','entretien'].includes(a.status)).sort((x,y)=>x.follow_up.localeCompare(y.follow_up)).slice(0,6).map(a=>`<li class="d-flex align-items-center gap-2 py-2">${av(a.company,a.logo)}<div class="me-auto"><div class="fw-semibold">${esc(a.company)}</div><small class="text-muted">${esc(a.position)}</small></div><small class="${a.follow_up<today?'text-danger fw-semibold':''}">${fd(a.follow_up)}</small></li>`).join('')||'<li class="text-muted py-2">Aucune relance planifiée</li>'}
+function render(){const t=q.toLowerCase(),L=D.filter(a=>!t||[a.company,a.position,a.location,a.contact_name,a.notes].join(' ').toLowerCase().includes(t));
+ const c=k=>D.filter(a=>a.status===k).length,sent=c('postule')+c('entretien')+c('offre')+c('refuse'),resp=c('entretien')+c('offre')+c('refuse');
+ const K=[['Total',D.length,'bi-briefcase'],['En cours',c('postule')+c('entretien'),'bi-hourglass-split'],['Entretiens',c('entretien'),'bi-chat-dots'],['Offres',c('offre'),'bi-trophy'],['Taux de réponse',(sent?Math.round(resp/sent*100):0)+'%','bi-graph-up-arrow']];
+ $('#stats').innerHTML=K.map(k=>`<div class="col-6 col-md"><div class="glass kpi"><small><i class="bi ${k[2]}" aria-hidden="true"></i> ${k[0]}</small><div><b>${k[1]}</b></div></div></div>`).join('');
+ const late=D.filter(a=>a.follow_up&&a.follow_up<=today&&['postule','entretien'].includes(a.status));
+ $('#late').innerHTML=late.length?`<div class="alert alert-warning d-flex align-items-center gap-2" role="alert"><i class="bi bi-bell"></i> ${late.length} relance(s) à effectuer : ${late.map(a=>esc(a.company)).join(', ')}</div>`:'';
+ ['dash','board','list','comps'].forEach(v=>$('#'+v).classList.toggle('d-none',v!==view));
+ if(view==='dash')dash();
+ $('#board').innerHTML=Object.keys(S).map(k=>{const x=L.filter(a=>a.status===k);return `<div class="glass col-b" data-s="${k}"><div class="col-h"><span class="dot" style="background:${S[k][1]}"></span>${S[k][0]}<span class="text-muted ms-auto">${x.length}</span></div>${x.map(a=>`<article class="card-a" draggable="true" tabindex="0" data-id="${a.id}"><div class="d-flex gap-2 align-items-center">${av(a.company,a.logo)}<div class="min-w-0"><div class="fw-semibold text-truncate">${esc(a.company)}</div><div class="text-muted small text-truncate">${esc(a.position)}</div></div>${a.priority==3?'<i class="bi bi-flag-fill text-danger ms-auto" title="Priorité haute" role="img" aria-label="Priorité haute"></i>':''}</div><div class="d-flex flex-wrap gap-2 mt-2 small text-muted">${a.location?`<span><i class="bi bi-geo-alt"></i> ${esc(a.location)}</span>`:''}${a.follow_up?`<span class="${a.follow_up<=today?'text-danger':''}"><i class="bi bi-bell"></i> ${fd(a.follow_up)}</span>`:''}${a.contract?`<span>${esc(a.contract)}</span>`:''}</div></article>`).join('')}</div>`}).join('');
+ $('#rows').innerHTML=L.map(a=>`<tr><td><div class="d-flex align-items-center gap-2">${av(a.company,a.logo)}<b>${esc(a.company)}</b></div></td><td>${esc(a.position)}</td><td>${badge(a.status)}</td><td>${esc(a.location)||'—'}</td><td>${fd(a.follow_up)}</td><td class="text-end"><button class="btn btn-icon d-inline-grid" data-id="${a.id}" aria-label="Modifier"><i class="bi bi-pencil"></i></button></td></tr>`).join('')||'<tr><td colspan="6" class="text-center text-muted py-4">Aucune candidature</td></tr>';
+ $('#comps').innerHTML=`<div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Entreprises (${C.length})</h2><button class="btn btn-brand" id="addc"><i class="bi bi-plus-lg"></i> Entreprise</button></div><div class="row g-3">${C.filter(c=>!t||[c.name,c.sector,c.city].join(' ').toLowerCase().includes(t)).map(c=>`<div class="col-sm-6 col-lg-4 col-xl-3"><article class="glass p-3 h-100 co-card" tabindex="0" data-c="${c.id}"><div class="d-flex gap-3 align-items-center">${av(c.name,c.logo)}<div class="min-w-0"><div class="fw-semibold text-truncate">${esc(c.name)}</div><small class="text-muted">${esc(c.sector||'Secteur non renseigné')}</small></div></div><div class="d-flex justify-content-between mt-3 small text-muted"><span><i class="bi bi-geo-alt"></i> ${esc(c.city||'—')}</span><span>${c.n} candidature(s)</span></div>${c.website?`<a class="small d-inline-block mt-2" href="${esc(c.website)}" target="_blank" rel="noopener">Site web <i class="bi bi-box-arrow-up-right"></i></a>`:''}</article></div>`).join('')}</div>`}
+function edit(id){const a=D.find(x=>x.id==id)||{status:'a_postuler',priority:2};f.reset();for(const k of f.elements)if(k.name)k.value=a[k.name]??'';
+ $('#cl').innerHTML=C.map(c=>`<option value="${esc(c.name)}">`).join('');$('#mt').textContent=a.id?'Modifier la candidature':'Nouvelle candidature';$('#del').style.display=a.id?'':'none';$('#tl').style.display=a.id?'':'none';if(a.id)tl(a.id);modal.show()}
+async function tl(id){const L=await api('activities&id='+id);$('#al').innerHTML=L.map(x=>`<li class="d-flex gap-2 py-2"><i class="bi ${I[x.type]}" aria-hidden="true"></i><div class="me-auto"><b>${x.type}</b> · <span class="text-muted">${new Date(x.happened_at.replace(' ','T')).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})}</span><div>${esc(x.content)}</div></div><button type="button" class="btn btn-sm" data-ad="${x.id}" aria-label="Supprimer l'échange"><i class="bi bi-x-lg"></i></button></li>`).join('')||'<li class="text-muted">Aucun échange enregistré</li>'}
+const addAct=async()=>{const c=$('#ac').value.trim();if(!c)return;await api('activity_add',{app_id:f.id.value,type:$('#at').value,content:c});$('#ac').value='';tl(f.id.value)};
+$('#aa').onclick=addAct;$('#ac').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addAct()}};
+function editC(id){const c=C.find(x=>x.id==id)||{};cf.reset();for(const k of cf.elements)if(k.name&&k.type!=='file')k.value=c[k.name]??'';$('#lp').innerHTML=av(c.name||'?',c.logo);$('#cdel').style.display=c.id?'':'none';$('#cmt').textContent=c.id?'Modifier l\'entreprise':'Nouvelle entreprise';cmodal.show()}
+cf.logo.onchange=e=>{const x=e.target.files[0];if(x)$('#lp').innerHTML=`<img class="co-logo" src="${URL.createObjectURL(x)}" alt="Aperçu du logo">`};
+cf.onsubmit=async e=>{e.preventDefault();try{await api('company_save',new FormData(cf));cmodal.hide();toast('Entreprise enregistrée');load()}catch(x){toast(x.message)}};
+$('#cdel').onclick=async()=>{if(confirm('Supprimer cette entreprise ? Les candidatures sont conservées.')){await api('company_delete',{id:cf.id.value});cmodal.hide();toast('Supprimée');load()}};
+f.status.innerHTML=Object.entries(S).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join('');
+f.onsubmit=async e=>{e.preventDefault();try{await api('save',Object.fromEntries(new FormData(f)));modal.hide();toast('Enregistré');load()}catch(x){toast(x.message)}};
+$('#del').onclick=async()=>{if(confirm('Supprimer cette candidature ?')){await api('delete',{id:f.id.value});modal.hide();toast('Supprimé');load()}};
+$('#add').onclick=()=>edit();$('#q').oninput=e=>{q=e.target.value;render()};
+$('#tabs').onclick=e=>{const b=e.target.closest('[data-v]');if(!b)return;view=b.dataset.v;document.querySelectorAll('#tabs .nav-link').forEach(n=>n.classList.toggle('active',n===b));render()};
+document.addEventListener('click',async e=>{const t=e.target;if(t.closest('#addc'))return editC();const ad=t.closest('[data-ad]');if(ad){await api('activity_delete',{id:ad.dataset.ad});return tl(f.id.value)}
+ const k=t.closest('[data-c]');if(k&&!t.closest('a'))return editC(k.dataset.c);const c=t.closest('.card-a,#rows [data-id]');if(c)edit(c.dataset.id)});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('.card-a'))edit(e.target.dataset.id);if(e.key==='Enter'&&e.target.matches('.co-card'))editC(e.target.dataset.c)});
+let dragId;$('#board').addEventListener('dragstart',e=>{const c=e.target.closest('.card-a');if(c){dragId=c.dataset.id;c.classList.add('drag')}});
+$('#board').addEventListener('dragend',e=>e.target.classList?.remove('drag'));
+$('#board').addEventListener('dragover',e=>{const c=e.target.closest('.col-b');if(c){e.preventDefault();c.classList.add('over')}});
+$('#board').addEventListener('dragleave',e=>e.target.closest('.col-b')?.classList.remove('over'));
+$('#board').addEventListener('drop',async e=>{const c=e.target.closest('.col-b');if(!c||!dragId)return;e.preventDefault();await api('status',{id:dragId,status:c.dataset.s});toast('Statut mis à jour');load()});
+const th=localStorage.getItem('theme');if(th)document.documentElement.dataset.bsTheme=th;
+$('#theme').onclick=()=>{const t=document.documentElement.dataset.bsTheme==='dark'?'light':'dark';document.documentElement.dataset.bsTheme=t;localStorage.setItem('theme',t);render()};
+$('#csv').onclick=()=>{const h=['company','position','status','contract','location','salary','url','contact_name','contact_email','applied_at','follow_up','notes'];
+ const r=[h,...D.map(a=>h.map(k=>`"${String(a[k]??'').replace(/"/g,'""')}"`))].map(x=>x.join(';')).join('\n');
+ const l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+r],{type:'text/csv'}));l.download='candidatures.csv';l.click()};
+load();
